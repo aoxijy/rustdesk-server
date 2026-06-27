@@ -2,6 +2,18 @@ name: build
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.1.15-custom)'
+        required: true
+        default: 'v1.1.15-custom'
+      prerelease:
+        description: 'Prerelease'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
 
 env:
   CARGO_TERM_COLOR: always
@@ -104,3 +116,47 @@ jobs:
             target/x86_64-apple-darwin/release/hbbr
             target/x86_64-apple-darwin/release/rustdesk-utils
           if-no-files-found: error
+
+  release:
+    name: Create Release
+    needs: [build-linux-amd64, build-windows-amd64, build-macos-amd64]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+      - name: Prepare release files
+        run: |
+          mkdir release-files
+          cp server-linux-amd64/hbbs release-files/hbbs-linux-amd64
+          cp server-linux-amd64/hbbr release-files/hbbr-linux-amd64
+          cp server-linux-amd64/rustdesk-utils release-files/rustdesk-utils-linux-amd64
+          cp server-windows-amd64/hbbs.exe release-files/hbbs-windows-amd64.exe
+          cp server-windows-amd64/hbbr.exe release-files/hbbr-windows-amd64.exe
+          cp server-windows-amd64/rustdesk-utils.exe release-files/rustdesk-utils-windows-amd64.exe
+          cp server-macos-amd64/hbbs release-files/hbbs-macos-amd64
+          cp server-macos-amd64/hbbr release-files/hbbr-macos-amd64
+          cp server-macos-amd64/rustdesk-utils release-files/rustdesk-utils-macos-amd64
+          cd release-files
+          sha256sum * > SHA256SUMS.txt
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: "RustDesk Server Custom Build ${{ inputs.tag }}"
+          body: |
+            ## RustDesk Server 自定义编译版
+
+            **默认服务器配置：**
+            - ID/中继服务器: hhc.gqru.com
+            - API 服务器: http://hhc.gqru.com:8585
+
+            **包含的二进制：**
+            - hbbs (ID/注册服务器)
+            - hbbr (中继服务器) 
+            - rustdesk-utils (工具)
+          draft: false
+          prerelease: ${{ inputs.prerelease }}
+          files: |
+            release-files/*
